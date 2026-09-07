@@ -3,6 +3,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
+[![Open your Home Assistant instance and open this repository in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=kevinclark&repository=sony-bdp-ip&category=integration)
 
 IP control for Sony's **BDP-CE** family of Blu-ray players — developed and
 tested against a **UBP-X700** — plus a Home Assistant integration built on
@@ -46,6 +47,9 @@ was ruled out along the way: [docs/PROTOCOL.md](docs/PROTOCOL.md).
 ## Installation
 
 ### HACS (recommended)
+
+Click the badge above (opens HACS directly to this repository), or add it
+manually:
 
 1. HACS → the "⋮" menu → **Custom repositories** → add this repository's
    URL with category **Integration**.
