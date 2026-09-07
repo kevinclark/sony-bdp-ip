@@ -80,6 +80,7 @@ _NS = {
     "s": "http://schemas.xmlsoap.org/soap/envelope/",
     "avt": "urn:schemas-upnp-org:service:AVTransport:1",
     "ircc": "urn:schemas-sony-com:service:IRCC:1",
+    "upnp": "urn:schemas-upnp-org:device-1-0",
 }
 
 
@@ -170,6 +171,28 @@ class SonyBdpClient:
         if state_el is None or state_el.text is None:
             return TransportState.UNKNOWN
         return TransportState.from_str(state_el.text)
+
+    def get_device_info(self) -> dict[str, str | None]:
+        """Friendly name/model from the player's own UPnP descriptor (dmr.xml).
+
+        Needs no pairing. Useful for a sensible display name — CERS's
+        getSystemInformation returns a generic internal name ("BDPlayer"),
+        not the model people would recognize (e.g. "UBP-X700").
+        """
+        url = f"http://{self.host}:{self.dmr_port}/dmr.xml"
+        response = requests.get(url, timeout=TIMEOUT)
+        response.raise_for_status()
+        root = ElementTree.fromstring(response.content)
+
+        def text(tag: str) -> str | None:
+            el = root.find(f".//upnp:{tag}", _NS)
+            return el.text if el is not None and el.text else None
+
+        return {
+            "friendly_name": text("friendlyName"),
+            "model_name": text("modelName"),
+            "model_number": text("modelNumber"),
+        }
 
     def get_system_information(self) -> dict[str, str | None]:
         """Model/generation/WOL-MAC info. Needs no pairing."""

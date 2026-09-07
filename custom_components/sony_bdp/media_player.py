@@ -17,7 +17,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .client import PairingRequired, TransportState
-from .const import CONF_NICKNAME, DOMAIN
+from .const import CONF_MODEL, DOMAIN
 from .coordinator import SonyBdpCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -53,9 +53,9 @@ class SonyBdpMediaPlayer(CoordinatorEntity[SonyBdpCoordinator], MediaPlayerEntit
         self._attr_unique_id = entry.unique_id or entry.entry_id
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, self._attr_unique_id)},
-            name=entry.data.get(CONF_NICKNAME, "Sony BDP-CE"),
+            name=entry.title,
             manufacturer="Sony",
-            model="BDP-CE",
+            model=entry.data.get(CONF_MODEL) or "BDP-CE",
         )
 
     @property

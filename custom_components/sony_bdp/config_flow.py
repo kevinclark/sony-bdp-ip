@@ -21,6 +21,7 @@ from .client import SonyBdpClient
 from .const import (
     CONF_CLIENT_ID,
     CONF_MAC,
+    CONF_MODEL,
     CONF_NICKNAME,
     CONF_PIN,
     DEFAULT_CLIENT_ID,
@@ -101,14 +102,28 @@ class SonyBdpConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["base"] = "cannot_connect"
             else:
                 if success:
+                    device_info = {}
+                    try:
+                        device_info = await self.hass.async_add_executor_job(
+                            client.get_device_info
+                        )
+                    except requests.exceptions.RequestException:
+                        pass
+                    title = (
+                        device_info.get("friendly_name")
+                        or device_info.get("model_name")
+                        or "Sony BDP-CE"
+                    )
                     return self.async_create_entry(
-                        title=self._nickname,
+                        title=title,
                         data={
                             CONF_HOST: self._host,
                             CONF_MAC: self._mac,
                             CONF_NICKNAME: self._nickname,
                             CONF_CLIENT_ID: self._client_id,
                             CONF_PIN: pin,
+                            CONF_MODEL: device_info.get("model_number")
+                            or device_info.get("model_name"),
                         },
                     )
                 errors["base"] = "invalid_pin"
