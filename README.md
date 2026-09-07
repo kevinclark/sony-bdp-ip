@@ -17,7 +17,8 @@ was ruled out along the way: [docs/PROTOCOL.md](docs/PROTOCOL.md).
 - A `media_player` entity: on/off, play/pause/stop/eject, and whether
   content is actively being watched — all over the network, no IR blaster.
 - Wake-on-LAN power-on from full standby.
-- Disc info (type/format) exposed as entity attributes when a disc is loaded.
+- Disc format (e.g. "UHD BD-ROM") shown as the media title when a disc is
+  loaded — see Limitations below for why it's format, not the movie's name.
 - A config flow: add the integration, enter the host, pair with the PIN the
   player displays. No YAML required.
 
@@ -27,8 +28,14 @@ was ruled out along the way: [docs/PROTOCOL.md](docs/PROTOCOL.md).
   this integration.** Checked directly against the device mid-pause —
   every status endpoint available returns identical results whether
   playing or paused. The entity's `playing` state means "content is on
-  screen," full stop. See [docs/PROTOCOL.md](docs/PROTOCOL.md) for the
-  four independent things that were tried and ruled out.
+  screen," full stop. See [docs/PROTOCOL.md](docs/PROTOCOL.md) for
+  everything that was tried and ruled out.
+- **No disc/movie title or artwork is available either** — the API only
+  ever reports physical format (BD/BD-ROM/UHD), never a title. `media_title`
+  shows that format, not the movie's name. The player's own on-screen title
+  most likely comes from metadata embedded on the disc itself, read
+  locally by the player — not something any remote-control protocol
+  (this one included) exposes externally.
 - Pairing needs a display connected and on, at least the first time — the
   PIN shows as on-screen text over HDMI (this unit has no front-panel
   display to fall back on).

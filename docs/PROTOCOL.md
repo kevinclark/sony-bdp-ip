@@ -232,7 +232,41 @@ currently paused" is not achievable on this device with what's been
 found.** The HA entity models this honestly — `playing` means "viewing,"
 there is no `paused` state it will ever report.
 
-`getHistoryList` — not yet tried.
+## No disc title or artwork anywhere — checked `getText` and `getHistoryList`
+
+The two remaining untried CERS actions from the registration actionList
+(alongside `getContentInformation`/`getStatus`) both came back **completely
+empty** when tried live with a disc actively playing (paired, same auth as
+everything else): `getText` and `getHistoryList`. `getText`/`sendText` are
+almost certainly for **virtual-keyboard text entry** (typing into an
+on-screen search field from a companion app), not content metadata — that
+pairing (`getText`+`sendText`) is exactly the shape of a text-input
+feature, not a playback-info one. `getHistoryList`'s empty result is
+unexplained (maybe needs parameters not yet tried, maybe playback history
+just isn't tracked/exposed this way).
+
+Also checked DIAL's (port 50202) app "run" link, since the player's own
+on-screen menu clearly shows a disc title/thumbnail *somewhere* — `GET
+/apps/com.sony.videoplayer/run` is `404` (not a queryable resource) and
+`POST` (its actual purpose per the DIAL spec) returns `411 Length
+Required`, i.e. it's a **launch** endpoint, would restart the Video
+Player app if actually invoked, and was not pursued further for that
+reason. Not a metadata source either way.
+
+**Conclusion: this device's local IP API does not expose a disc/movie
+title or any artwork, anywhere.** `getContentInformation`/`getStatus`
+only ever return physical format info (BD/BD-ROM/UHD) — there's no field
+for a title, and no evidence of an online lookup (Gracenote-style or
+otherwise) being exposed externally even if the player does one
+internally for its own UI. Best guess for where the on-screen title
+actually comes from: BD-ROM discs commonly carry their own embedded
+metadata (title, thumbnails) in a `BDMV/META/DL/` folder on the disc
+itself — a local disc-filesystem read internal to the player's playback
+engine, not something any remote-control protocol (this one included)
+would have a reason to mirror externally. `media_player.ubp_x700`'s
+`media_title` reflects this honestly — it shows the format description
+("UHD BD-ROM"), not a movie name, because that's genuinely all there is
+over IP.
 
 ## Port 50202: a real DIAL 2.0 app launcher (confirmed, but redundant)
 
@@ -283,8 +317,9 @@ without a real lead rather than guessing.
   question this project was actually about.
 - Does pairing persist across player reboots/firmware updates, or does the
   `deviceId` need re-registering periodically?
-- `getHistoryList` untried — name suggests playback history, unlikely to
-  help with live state but unexplored.
+- `getHistoryList` returned empty when tried with a disc playing — worth
+  retrying with parameters if a real lead ever turns up (untried: does it
+  want a query string? a POST body?), but not promising on its own.
 
 ## Two Home Assistant bugs found along the way (not protocol-specific)
 

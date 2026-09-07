@@ -9,6 +9,7 @@ from homeassistant.components.media_player import (
     MediaPlayerEntity,
     MediaPlayerEntityFeature,
     MediaPlayerState,
+    MediaType,
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -73,16 +74,37 @@ class SonyBdpMediaPlayer(CoordinatorEntity[SonyBdpCoordinator], MediaPlayerEntit
         return MediaPlayerState.PLAYING if data.viewing_content else MediaPlayerState.IDLE
 
     @property
+    def media_content_type(self) -> str | None:
+        data = self.coordinator.data
+        if data and data.viewing_content:
+            return MediaType.VIDEO
+        return None
+
+    @property
+    def media_title(self) -> str | None:
+        """A format description ("UHD BD-ROM"), not the movie's title.
+
+        No real title or artwork is available anywhere in this device's
+        API — getContentInformation/getStatus only ever return physical
+        format info, and getText/getHistoryList (the two other CERS
+        actions that sounded promising) came back empty when tried; see
+        docs/PROTOCOL.md. This is the most useful thing there is to show.
+        """
+        data = self.coordinator.data
+        if data is None or not data.disc_info:
+            return None
+        parts = [
+            data.disc_info.get("mediaFormat"),
+            data.disc_info.get("mediaType"),
+        ]
+        return " ".join(p for p in parts if p) or None
+
+    @property
     def extra_state_attributes(self) -> dict[str, str]:
-        """Disc info (type/mediaType/mediaFormat), when a disc is loaded."""
         data = self.coordinator.data
         if data is None or not data.disc_info:
             return {}
-        return {
-            "disc_type": data.disc_info.get("type"),
-            "media_type": data.disc_info.get("mediaType"),
-            "media_format": data.disc_info.get("mediaFormat"),
-        }
+        return {"disc_type": data.disc_info.get("type")}
 
     async def _async_send(self, name: str, action) -> None:
         try:
