@@ -1,0 +1,10 @@
+[project]
+name = "sony-bdp-ip"
+version = "0.1.0"
+description = "IP control client for Sony BDP-CE Blu-ray players (e.g. UBP-X700)"
+requires-python = ">=3.11"
+dependencies = ["requests"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
