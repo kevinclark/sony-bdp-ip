@@ -16,9 +16,9 @@ Confirmed open on the player when powered on:
 | Port  | Purpose |
 |-------|---------|
 | 50001 | IRCC control (`/upnp/control/IRCC`) + device descriptor (`/Ircc.xml`) |
-| 50002 | CERS registration + info actions (`/register`, `/getSystemInformation`, etc.) |
-| 50201 | Open, unidentified (404 on `/`, same `Sony-BDP/2.0` server header) |
-| 50202 | Open, unidentified (404 on `/`, same `Sony-BDP/2.0` server header) |
+| 50002 | CERS registration + info actions (`/register`, `/getSystemInformation`, `/getStatus`, etc.) |
+| 50201 | Open, still unidentified (404 on every path tried, incl. DIAL-style ones) |
+| 50202 | **DIAL 2.0 app launcher** — see below. Not just open, genuinely used. |
 | 52323 | DLNA/UPnP MediaRenderer — `dmr.xml`, `AVTransport`, `RenderingControl` |
 
 All confirmed via `nc`/`curl` from a host on the same VLAN. Nothing responds
@@ -234,17 +234,53 @@ there is no `paused` state it will ever report.
 
 `getHistoryList` — not yet tried.
 
+## Port 50202: a real DIAL 2.0 app launcher (confirmed, but redundant)
+
+Identified by checking what [sonyapilib](https://github.com/gohlas/sonyapilib)
+does with its `app_port` (default `50202`, matching this device exactly) —
+it's a [DIAL](https://en.wikipedia.org/wiki/Discovery_and_Launch) 2.0
+service for launching apps (native Video/Music Player, plus Netflix,
+YouTube, Amazon Prime, Spotify, Pandora, etc). No auth needed.
+
+List apps:
+```
+GET http://<ip>:50202/appslist
+```
+Returns a `<service><app>...` list, each with an `id` (e.g.
+`com.sony.videoplayer`, `com.sony.iptv.type.NRDP` for Netflix) and `name`.
+
+Query one app's run state — genuine DIAL 2.0 (`xmlns="urn:dial-multiscreen-org:schemas:dial"`):
+```
+GET http://<ip>:50202/apps/com.sony.videoplayer
+```
+Returns `<state>running</state>` or `<state>stopped</state>`.
+
+**Confirmed live, multiple states**: `com.sony.videoplayer`'s DIAL state
+is `running` from the moment you enter the disc (its own top menu counts
+— confirmed separately from the player's home menu, which reads
+`stopped`) through the studio-logo intro, into the feature, and
+**unchanged through a real mid-movie pause** — i.e. it's the exact same
+granularity as CERS `getStatus`'s `viewing` entry, just via a different,
+standards-based mechanism. Not more useful for play/pause detection, but
+a genuinely independent confirmation of the same signal — two unrelated
+services on this device agree on where the "watching vs. not" line is,
+which is reassuring evidence `getStatus` isn't some fluke Sony-specific
+side effect. **Port 50201 remains fully unidentified** — every guessed
+path returned 404, including DIAL-style ones (`/dd.xml`,
+`/DIAL/sony/applist`) and CERS-style ones — not worth pursuing further
+without a real lead rather than guessing.
+
 ## Open questions / next verification steps
 
 - Confirm whether "Remote Start" is actually required for pairing, or was
   coincidental.
-- Ports 50201/50202 are open but returned 404 for every path guessed
-  (`/`, `/status`, `/dmr.xml`, `/description.xml`, `/webapi`,
-  `/sony/system`, `/getPlayStatus`, `/getPlaybackStatus`,
-  `/getPlayingStatus`) — no evidence either is actually used by this
-  model; likely vestigial from the shared Bravia/BDP codebase (50202
-  matches sonyapilib's old Bravia "app_port" default). Not pursued
-  further without a better lead than guessing paths.
+- **Port 50201 remains unidentified** — every guessed path 404'd. Not
+  worth pursuing further without a real lead (e.g. packet-capturing an
+  actual Sony remote app talking to this device) rather than guessing.
+- Port 50202's app launcher (`appslist`/`apps/{id}`) is real and unused
+  by this integration so far — could add `start_app("Netflix")`-style
+  control later if useful, but doesn't help with the local-playback
+  question this project was actually about.
 - Does pairing persist across player reboots/firmware updates, or does the
   `deviceId` need re-registering periodically?
 - `getHistoryList` untried — name suggests playback history, unlikely to
