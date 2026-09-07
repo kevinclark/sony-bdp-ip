@@ -112,12 +112,17 @@ The player answers `401 Unauthorized` /
 `WWW-Authenticate: Basic realm="Sony-BDP registration"` on the register
 endpoint until paired. Confirmed live.
 
-**One prerequisite found live**: the player's Setup → Network menu has a
-"Remote Start" option, off by default, that (per Sony's docs) governs
-whether app-based remote control/registration is allowed. We turned it on
-before pairing worked — not confirmed as strictly required (registration
-may well have worked with it off too, since basic queries never needed it),
-but flip it on before attempting pairing to rule it out as a variable.
+**Two prerequisites, both under Setup → Network Settings on the player**:
+- **"Remote Start"**, off by default, that (per Sony's docs) governs
+  whether app-based remote control/registration is allowed. We turned it
+  on before pairing worked — not confirmed as strictly required
+  (registration may well have worked with it off too, since basic queries
+  never needed it), but flip it on before attempting pairing to rule it
+  out as a variable.
+- **"Auto Home Network Access Permission"** — per Kevin (owner of the test
+  unit), also relevant, same menu. Not independently verified against a
+  freshly-reset device with this specifically toggled off, but flip it on
+  too before attempting pairing.
 
 Registration action is discovered from `/Ircc.xml`'s
 `X_CERS_ActionList_URL`, which points to `http://<ip>:50002/actionList`:
