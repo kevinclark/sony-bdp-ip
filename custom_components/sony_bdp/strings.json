@@ -1,0 +1,29 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to the player",
+        "data": {
+          "host": "Host (IP address)",
+          "mac": "MAC address (optional, enables power-on via Wake-on-LAN)",
+          "nickname": "Name shown on the player as the paired device"
+        }
+      },
+      "pin": {
+        "title": "Enter the PIN",
+        "description": "The player is showing a PIN as on-screen text over HDMI — make sure a display is on and set to the player's input.",
+        "data": {
+          "pin": "PIN"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Couldn't reach the player at that address.",
+      "invalid_pin": "That PIN wasn't accepted — check the on-screen display and try again.",
+      "unexpected_response": "The player didn't ask for a PIN the way this integration expects. It may need a different pairing mode."
+    },
+    "abort": {
+      "already_configured": "This player is already configured."
+    }
+  }
+}
