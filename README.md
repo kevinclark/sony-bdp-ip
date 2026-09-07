@@ -1,42 +1,37 @@
 <!-- markdownlint-disable MD041 -->
-# Sony BDP-CE Blu-ray Player for Home Assistant
+# sony-bdp-ip
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
-[![Open your Home Assistant instance and open this repository in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=kevinclark&repository=sony-bdp-ip&category=integration)
 
-IP control for Sony's **BDP-CE** family of Blu-ray players — developed and
-tested against a **UBP-X700** — plus a Home Assistant integration built on
-top of it. Sony never officially documented this API; it's the same
-protocol the **Video & TV SideView** app used before its sunset
-(2027-03-30), reverse-engineered here against a real device and confirmed
-live at every step. Full protocol writeup, including every dead end that
-was ruled out along the way: [docs/PROTOCOL.md](docs/PROTOCOL.md).
+A Python client for the undocumented IP control protocol used by Sony's
+**BDP-CE** family of Blu-ray players — developed and tested against a
+**UBP-X700**. No official Sony documentation exists for this; it's the
+same protocol the **Video & TV SideView** app used before its sunset
+(2027-03-30), reverse-engineered against a real device and confirmed live
+at every step. Full protocol write-up, including every dead end that was
+ruled out along the way: [docs/PROTOCOL.md](docs/PROTOCOL.md).
 
-## What you get
+Looking for the **Home Assistant integration**? It lives in a separate
+repo: [**home-assistant-sony-bdp**](https://github.com/kevinclark/home-assistant-sony-bdp).
 
-- A `media_player` entity: on/off, play/pause/stop/eject, and whether
-  content is actively being watched — all over the network, no IR blaster.
-- Wake-on-LAN power-on from full standby.
-- Disc format (e.g. "UHD BD-ROM") shown as the media title when a disc is
-  loaded — see Limitations below for why it's format, not the movie's name.
-- A config flow: add the integration, enter the host, pair with the PIN the
-  player displays. No YAML required.
+## What it does
 
-## Limitations (read this before filing an issue about it)
+- Wake-on-LAN power-on, and reading basic system info — no pairing needed.
+- Remote-button-style control (play/pause/stop/eject/power/...) via a
+  one-time PIN pairing.
+- "Is content actively being watched right now" — the actual usable local
+  state signal on this device, found the hard way (see Limitations).
 
-- **This device cannot distinguish playing from paused, and neither can
-  this integration.** Checked directly against the device mid-pause —
-  every status endpoint available returns identical results whether
-  playing or paused. The entity's `playing` state means "content is on
-  screen," full stop. See [docs/PROTOCOL.md](docs/PROTOCOL.md) for
-  everything that was tried and ruled out.
-- **No disc/movie title or artwork is available either** — the API only
-  ever reports physical format (BD/BD-ROM/UHD), never a title. `media_title`
-  shows that format, not the movie's name. The player's own on-screen title
-  most likely comes from metadata embedded on the disc itself, read
-  locally by the player — not something any remote-control protocol
-  (this one included) exposes externally.
+## Limitations
+
+- **This device cannot distinguish playing from paused.** Checked directly
+  against the device mid-pause — every status endpoint available returns
+  identical results whether playing or paused. `is_viewing_content()`
+  means "content is on screen," full stop. See
+  [docs/PROTOCOL.md](docs/PROTOCOL.md) for the four independent things
+  that were tried and ruled out.
+- **No disc/movie title or artwork is available either** — only physical
+  format (BD/BD-ROM/UHD). See docs/PROTOCOL.md for why.
 - Pairing needs a display connected and on, at least the first time — the
   PIN shows as on-screen text over HDMI (this unit has no front-panel
   display to fall back on).
@@ -46,39 +41,13 @@ was ruled out along the way: [docs/PROTOCOL.md](docs/PROTOCOL.md).
 
 ## Installation
 
-### HACS (recommended)
+Not yet published to PyPI. Install directly from GitHub:
 
-Click the badge above (opens HACS directly to this repository), or add it
-manually:
+```bash
+pip install git+https://github.com/kevinclark/sony-bdp-ip.git
+```
 
-1. HACS → the "⋮" menu → **Custom repositories** → add this repository's
-   URL with category **Integration**.
-2. Search for **"Sony BDP-CE Blu-ray Player"** in HACS and install it.
-3. Restart Home Assistant.
-
-### Manual
-
-Copy `custom_components/sony_bdp` into your `config/custom_components/`
-directory and restart Home Assistant.
-
-## Setup
-
-**Settings → Devices & Services → Add Integration → "Sony BDP-CE Blu-ray
-Player."** You'll need:
-
-- The player's IP address (a static/reserved DHCP lease is strongly
-  recommended — this integration doesn't do discovery).
-- Its MAC address, if you want power-on via Wake-on-LAN (check the
-  player's network settings menu, or your router's client list).
-
-The player will then show a PIN as on-screen text — make sure a display is
-on and fed from the player before you submit the form. Enter that PIN on
-the next screen to finish pairing.
-
-## Standalone Python library
-
-`sony_bdp_ip` is the protocol client with no Home Assistant dependency, for
-scripting or other integrations:
+## Usage
 
 ```python
 from sony_bdp_ip import SonyBdpClient
@@ -96,9 +65,9 @@ client.is_viewing_content()       # True while content is on screen
 client.wake_on_lan()
 ```
 
-`custom_components/sony_bdp` vendors its own copy of this client (see that
-file's docstring) rather than depending on it as a published package, since
-`sony_bdp_ip` isn't on PyPI (yet).
+See [sony_bdp_ip/client.py](sony_bdp_ip/client.py) for the full API —
+every method is documented inline with what it needs (pairing or not) and
+what was verified live against a real device.
 
 ## Contributing
 

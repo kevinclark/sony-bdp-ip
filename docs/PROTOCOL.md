@@ -218,9 +218,10 @@ confirmed-working "content is actively being watched" signal** on this
 device. `getContentInformation` returns the same `class`/`source`/
 `mediaType`/`mediaFormat` fields regardless of viewing vs. menu (useful
 for identifying the disc, not for playback state). `is_viewing_content()`
-in `sony_bdp_ip/client.py` wraps this. This is what
-`custom_components/sony_bdp`'s `media_player.ubp_x700` actually polls now
-(not `AVTransport`, which is ruled out above).
+in `sony_bdp_ip/client.py` wraps this. This is what the [Home Assistant
+integration](https://github.com/kevinclark/home-assistant-sony-bdp)'s
+`media_player.ubp_x700` actually polls now (not `AVTransport`, which is
+ruled out above).
 
 **Confirmed NOT distinguishable, checked directly against the device
 mid-pause**: playing vs. paused. `getStatus`/`getContentInformation` are
