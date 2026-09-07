@@ -18,13 +18,22 @@ Early / in progress. So far, confirmed live against a real UBP-X700:
 - [x] Wake-on-LAN power-on (device confirms WOL support; not yet tested end-to-end from cold)
 - [x] PIN pairing flow — confirmed live 2026-09-07
 - [x] Remote control (play/pause/stop/power/eject/...) via IRCC — confirmed live, eject physically verified
-- [ ] Home Assistant integration (`custom_components/sony_bdp`)
+- [x] Home Assistant integration (`custom_components/sony_bdp`) — deployed
+  and live on a real HA instance 2026-09-07: config-flow pairing walked
+  through end-to-end via the actual UI, `media_player` entity correctly
+  reporting `idle`/playback state from the coordinator.
+- [ ] Feed transport state into an actual automation (the original
+  motivation — theater `during_movie`/`pre_movie` mode currently can't
+  tell Blu-ray play from pause; see the theater automation docs in the
+  main `ha` repo's CLAUDE.md)
 
 ## Layout
 
 - `sony_bdp_ip/` — the standalone protocol client, no HA dependency.
-- `custom_components/sony_bdp/` — Home Assistant integration wrapping it
-  (not started yet).
+- `custom_components/sony_bdp/` — Home Assistant integration wrapping it.
+  Vendors its own copy of the client (see that file's docstring) rather
+  than depending on `sony_bdp_ip` as a pip package, since the latter isn't
+  published anywhere yet.
 - `docs/PROTOCOL.md` — protocol reference.
 
 ## Quick usage
