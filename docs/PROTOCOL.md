@@ -29,7 +29,28 @@ stack to be up. `dmr.xml` explicitly advertises
 and CERS `getSystemInformation` confirms `<function name="WOL"><functionItem
 field="MAC" value="88-c9-e8-61-66-c5"/></function>`.
 
-## Playback / transport state — no pairing required
+## Playback / transport state — reachable, but does NOT reflect local playback
+
+**Update 2026-09-07, live disc test: this does not work for local disc
+playback.** `GetTransportInfo` stayed `NO_MEDIA_PRESENT` throughout an
+entire play → pause → stop cycle driven by the player's own physical
+remote, confirmed twice, including a direct query (bypassing HA/any
+caching) taken at the exact moment content was confirmed actively playing
+on screen. IRCC's `X_GetStatus` was tried as a fallback and also ruled
+out: its `CurrentCommandInfo` field decodes to the same 13-byte structure
+as an `X_SendIRCC` command payload, and its trailing command-code byte
+matched **the last IRCC command this session had actually sent** (`0x16`
+= Eject, sent hours earlier) — it's an echo of the last remote command
+processed, not a playback-state readout.
+
+Working theory: `AVTransport` on this firmware is wired only for
+DLNA-pushed ("Play To") content — a separate pipeline from local
+disc/menu-driven playback — so it's a real UPnP MediaRenderer, just not
+one that observes what the physical remote is doing. Below is kept as
+protocol documentation (the service is real and responds), but **don't
+build an HA play-state signal on it** — see the "Known gaps" note in the
+main `ha` repo's `CLAUDE.md` for the automation that was built then
+reverted based on this finding.
 
 Standard UPnP `AVTransport` service, no auth needed at all:
 
@@ -51,10 +72,9 @@ SOAPACTION: "urn:schemas-upnp-org:service:AVTransport:1#GetTransportInfo"
 
 Response body contains `<CurrentTransportState>`, one of the standard UPnP
 AVTransport values: `PLAYING`, `PAUSED_PLAYBACK`, `STOPPED`,
-`NO_MEDIA_PRESENT`, `TRANSITIONING`. Verified live (returned
-`NO_MEDIA_PRESENT` with no disc loaded). **This is the play/pause/stop
-signal that was previously missing** for the theater automation — see the
-main HA repo's `CLAUDE.md` ("no play-state signal exists for bluray").
+`NO_MEDIA_PRESENT`, `TRANSITIONING`. Initially assumed this would be the
+long-missing play/pause/stop signal for the theater automation — **it
+is not**, for local disc playback (see the update above).
 
 IRCC also exposes an unauthenticated status query:
 
@@ -74,8 +94,16 @@ SOAPACTION: "urn:schemas-sony-com:service:IRCC:1#X_GetStatus"
 </s:Envelope>
 ```
 
-Returns `<CurrentStatus>` (integer code, meaning not yet decoded) and
-`<CurrentCommandInfo>` (base64, not yet decoded).
+Returns `<CurrentStatus>` (integer, always seen as `0`) and
+`<CurrentCommandInfo>` (base64). **Decoded 2026-09-07: `CurrentCommandInfo`
+is an echo of the last `X_SendIRCC` command this session sent, not a
+playback-state readout.** It decodes to the same byte layout as an IRCC
+command payload — `CategoryCode bytes (6) + 00 00 00 <command-code-byte>`
+— e.g. after sending Eject (`AAAAAwAAHFoAAAAWAw==`, command byte `0x16`),
+`X_GetStatus` returned `AAMAABxaAAAAFg==` (also ending in `0x16`), even
+though nothing had actually ejected/changed since. A response taken right
+after pairing with no commands sent yet was all zero bytes. Ruled out as a
+play-state source for this reason.
 
 CERS `getSystemInformation` (plain `GET`, no auth) returns model/generation/
 supported remote types/WOL MAC — useful for identification but not state.
@@ -153,11 +181,18 @@ Other CERS actions gated behind the same pairing:
 
 ## Open questions / next verification steps
 
+- **The real open question now: is there ANY read-only signal on this
+  device that reflects local disc playback state?** `AVTransport` and
+  IRCC's `X_GetStatus` are both ruled out (see above). Untried:
+  `getContentInformation`/`getStatus` (CERS, port 50002) — both returned
+  structurally-valid-but-empty XML with no disc loaded; worth one more
+  live check with a disc actually playing, though given the AVTransport
+  result, low expectation these differ (same underlying local-playback
+  blind spot seems likely, not confirmed). If nothing pans out, the
+  honest conclusion is this device has no local-playback state exposed
+  over IP at all, full stop — control-only.
 - Confirm whether "Remote Start" is actually required for pairing, or was
   coincidental.
-- Capture `getContentInformation`/`getStatus` output with a disc actually
-  loaded and playing, to see their real shape (title, elapsed time, etc.).
-- Decode `X_GetStatus`'s `CurrentStatus`/`CurrentCommandInfo` values.
 - Confirm ports 50201/50202 (open, unidentified purpose — 50202 matches
   sonyapilib's Bravia "app_port" default, may be vestigial on this device).
 - Does pairing persist across player reboots/firmware updates, or does the
