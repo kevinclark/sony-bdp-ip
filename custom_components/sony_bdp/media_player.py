@@ -72,6 +72,18 @@ class SonyBdpMediaPlayer(CoordinatorEntity[SonyBdpCoordinator], MediaPlayerEntit
             return MediaPlayerState.OFF
         return MediaPlayerState.PLAYING if data.viewing_content else MediaPlayerState.IDLE
 
+    @property
+    def extra_state_attributes(self) -> dict[str, str]:
+        """Disc info (type/mediaType/mediaFormat), when a disc is loaded."""
+        data = self.coordinator.data
+        if data is None or not data.disc_info:
+            return {}
+        return {
+            "disc_type": data.disc_info.get("type"),
+            "media_type": data.disc_info.get("mediaType"),
+            "media_format": data.disc_info.get("mediaFormat"),
+        }
+
     async def _async_send(self, name: str, action) -> None:
         try:
             await self.hass.async_add_executor_job(action)

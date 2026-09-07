@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import timedelta
 
 import requests
@@ -22,12 +22,14 @@ class SonyBdpData:
 
     reachable: bool
     viewing_content: bool
+    disc_info: dict[str, str] = field(default_factory=dict)
 
 
 class SonyBdpCoordinator(DataUpdateCoordinator[SonyBdpData]):
-    """Polls whether content is actively being watched (not play vs. pause
-    — see docs/PROTOCOL.md; that distinction isn't available on this
-    device). Treats connection failure as 'powered off'.
+    """Polls getStatus: whether content is actively being watched (not play
+    vs. pause — see docs/PROTOCOL.md; that distinction isn't available on
+    this device) plus whatever disc info is loaded. Treats connection
+    failure as 'powered off'.
 
     The player drops off the network entirely in full standby (relying on
     Wake-on-LAN at the Ethernet frame level, no IP stack involved) — see
@@ -46,9 +48,11 @@ class SonyBdpCoordinator(DataUpdateCoordinator[SonyBdpData]):
 
     async def _async_update_data(self) -> SonyBdpData:
         try:
-            viewing = await self.hass.async_add_executor_job(
-                self.client.is_viewing_content
-            )
+            status = await self.hass.async_add_executor_job(self.client.get_status)
         except requests.exceptions.RequestException:
             return SonyBdpData(reachable=False, viewing_content=False)
-        return SonyBdpData(reachable=True, viewing_content=viewing)
+        return SonyBdpData(
+            reachable=True,
+            viewing_content="viewing" in status,
+            disc_info=status.get("disc", {}),
+        )
