@@ -11,32 +11,38 @@ protocol notes: [docs/PROTOCOL.md](docs/PROTOCOL.md).
 
 ## Status
 
-Early / in progress. So far, confirmed live against a real UBP-X700:
+Confirmed live against a real UBP-X700, 2026-09-07:
 
 - [x] Basic system info + WOL MAC — no pairing needed
 - [x] Wake-on-LAN power-on (device confirms WOL support; not yet tested end-to-end from cold)
-- [x] PIN pairing flow — confirmed live 2026-09-07
-- [x] Remote control (play/pause/stop/power/eject/...) via IRCC — confirmed live, eject physically verified
+- [x] PIN pairing flow
+- [x] Remote control (play/pause/stop/power/eject/...) via IRCC — eject physically verified
 - [x] Home Assistant integration (`custom_components/sony_bdp`) — deployed
-  and live on a real HA instance 2026-09-07: config-flow pairing walked
-  through end-to-end via the actual UI.
-- [x] ~~Playback state~~ **Ruled out 2026-09-07**: `AVTransport`'s
-  `GetTransportInfo` does **not** reflect local disc playback on this
-  device — confirmed with a live disc test (stayed `NO_MEDIA_PRESENT`
-  throughout an actual play/pause/stop cycle, checked directly at the
-  moment playback was confirmed happening). IRCC's `X_GetStatus` was
-  tried as a fallback and also ruled out (it just echoes the last IRCC
-  command sent). See [docs/PROTOCOL.md](docs/PROTOCOL.md) for the full
-  writeup. **The original motivation for this whole project — telling
-  the theater automation when the player is actually playing — is not
-  achievable with what's been found so far.** The HA integration and
-  automation change built on the (wrong) assumption that it was were
-  reverted the same day; this repo's `media_player.ubp_x700` entity is
-  control-only for now.
-- [ ] Find *any* read-only local-playback signal on this device (see
-  "Open questions" in PROTOCOL.md) — otherwise this device is genuinely
-  control-only over IP, and that's a real, final answer, not a gap to
-  keep chasing indefinitely.
+  and live on a real HA instance, config-flow pairing walked through
+  end-to-end via the actual UI
+- [x] **"Actively watching content" signal — found, working, wired into
+  the theater automation.** Not `AVTransport` (ruled out — see
+  PROTOCOL.md, it only tracks DLNA-pushed content, not local disc
+  playback) and not IRCC's `X_GetStatus` (ruled out — it just echoes the
+  last IRCC command sent). The real signal is CERS `getStatus`: a
+  `"viewing"` entry appears while content is on screen and disappears
+  back at a menu, confirmed with live before/after comparisons.
+  `media_player.ubp_x700` polls this and reports `playing`/`idle`
+  accordingly; the theater automation now reacts to real Blu-ray state
+  the same way it already did for Apple TV.
+- [x] ~~Play vs. paused~~ **Confirmed not distinguishable**, checked
+  directly against the device mid-pause: `getStatus` is byte-for-byte
+  identical whether playing or paused. Nothing tried anywhere in this
+  protocol separates the two. `media_player.ubp_x700` will only ever
+  report `playing` or `idle`, never `paused` — that's accurate, not a
+  bug to keep chasing.
+
+See [docs/PROTOCOL.md](docs/PROTOCOL.md) for the full writeup, including
+two real bugs found along the way that aren't specific to this device:
+Home Assistant doesn't re-import a custom_component's `.py` files on a
+config-entry reload (a full `ha core restart` is required after editing
+code), and renaming a live entity's `entity_id` can silently orphan its
+polling coordinator.
 
 ## Layout
 

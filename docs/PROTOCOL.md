@@ -31,26 +31,24 @@ field="MAC" value="88-c9-e8-61-66-c5"/></function>`.
 
 ## Playback / transport state — reachable, but does NOT reflect local playback
 
-**Update 2026-09-07, live disc test: this does not work for local disc
-playback.** `GetTransportInfo` stayed `NO_MEDIA_PRESENT` throughout an
-entire play → pause → stop cycle driven by the player's own physical
-remote, confirmed twice, including a direct query (bypassing HA/any
-caching) taken at the exact moment content was confirmed actively playing
-on screen. IRCC's `X_GetStatus` was tried as a fallback and also ruled
-out: its `CurrentCommandInfo` field decodes to the same 13-byte structure
-as an `X_SendIRCC` command payload, and its trailing command-code byte
-matched **the last IRCC command this session had actually sent** (`0x16`
-= Eject, sent hours earlier) — it's an echo of the last remote command
-processed, not a playback-state readout.
+**Ruled out 2026-09-07 as a play-state source — the real working signal
+is CERS `getStatus`, documented further down.** `GetTransportInfo` stayed
+`NO_MEDIA_PRESENT` throughout an entire play → pause → stop cycle driven
+by the player's own physical remote, confirmed twice, including a direct
+query (bypassing HA/any caching) taken at the exact moment content was
+confirmed actively playing on screen. IRCC's `X_GetStatus` was tried as a
+fallback and also ruled out: its `CurrentCommandInfo` field decodes to
+the same 13-byte structure as an `X_SendIRCC` command payload, and its
+trailing command-code byte matched **the last IRCC command this session
+had actually sent** (`0x16` = Eject, sent hours earlier) — it's an echo
+of the last remote command processed, not a playback-state readout.
 
 Working theory: `AVTransport` on this firmware is wired only for
 DLNA-pushed ("Play To") content — a separate pipeline from local
 disc/menu-driven playback — so it's a real UPnP MediaRenderer, just not
-one that observes what the physical remote is doing. Below is kept as
-protocol documentation (the service is real and responds), but **don't
-build an HA play-state signal on it** — see the "Known gaps" note in the
-main `ha` repo's `CLAUDE.md` for the automation that was built then
-reverted based on this finding.
+one that observes what the physical remote is doing. Kept below as
+protocol documentation (the service is real and responds), but don't
+build anything on it — use CERS `getStatus` instead, see further down.
 
 Standard UPnP `AVTransport` service, no auth needed at all:
 
@@ -172,28 +170,109 @@ The full command table was pulled live from `getRemoteCommandList` (port
 `IRCC_CODES` for the complete confirmed list (Play, Pause, Stop, Power,
 Eject, transport/menu/number-pad buttons, Netflix, etc.).
 
-Other CERS actions gated behind the same pairing:
-- `getContentInformation` — returned an empty `<statusList/>`-style
-  response with no disc loaded; not yet seen with a disc in to know its
-  real shape.
-- `getStatus` — same, empty `<statusList/>` when idle.
-- `getHistoryList` — not yet tried.
+## The actual working local-content signal: CERS `getStatus`
+
+**Resolved 2026-09-07, after a second live disc test with a real
+before/after comparison.** `getContentInformation` and `getStatus` (CERS,
+port 50002, same auth as above) are **not** empty once a disc is actually
+loaded — they were only empty in the very first test because there was no
+disc in the drive. With a disc in:
+
+```
+GET http://<ip>:50002/getStatus
+Authorization: Basic <base64>
+X-CERS-DEVICE-ID: <client-id>
+X-CERS-DEVICE-INFO: <client-id>
+```
+
+**At the player's own menu, with a disc loaded** (confirmed live):
+```xml
+<statusList>
+  <status name="disc">
+    <statusItem field="type" value="BD"/>
+    <statusItem field="mediaType" value="BD-ROM"/>
+    <statusItem field="mediaFormat" value="UHD"/>
+  </status>
+</statusList>
+```
+
+**Actively watching content — playing or paused, confirmed identical for
+both** (this device does not distinguish play from pause anywhere; see
+below):
+```xml
+<statusList>
+  <status name="viewing">
+    <statusItem field="class" value="video"/>
+    <statusItem field="source" value="BD"/>
+  </status>
+  <status name="disc">
+    <statusItem field="type" value="BD"/>
+    <statusItem field="mediaType" value="BD-ROM"/>
+    <statusItem field="mediaFormat" value="UHD"/>
+  </status>
+</statusList>
+```
+
+So: **presence of a `<status name="viewing">` entry is the real,
+confirmed-working "content is actively being watched" signal** on this
+device. `getContentInformation` returns the same `class`/`source`/
+`mediaType`/`mediaFormat` fields regardless of viewing vs. menu (useful
+for identifying the disc, not for playback state). `is_viewing_content()`
+in `sony_bdp_ip/client.py` wraps this. This is what
+`custom_components/sony_bdp`'s `media_player.ubp_x700` actually polls now
+(not `AVTransport`, which is ruled out above).
+
+**Confirmed NOT distinguishable, checked directly against the device
+mid-pause**: playing vs. paused. `getStatus`/`getContentInformation` are
+byte-for-byte identical in both states — the `viewing` entry is present
+either way. Nothing found anywhere in this protocol (AVTransport, IRCC
+status, or CERS status/content) separates the two. Practical conclusion:
+**"is a movie actively being watched" is real and working; "is it
+currently paused" is not achievable on this device with what's been
+found.** The HA entity models this honestly — `playing` means "viewing,"
+there is no `paused` state it will ever report.
+
+`getHistoryList` — not yet tried.
 
 ## Open questions / next verification steps
 
-- **The real open question now: is there ANY read-only signal on this
-  device that reflects local disc playback state?** `AVTransport` and
-  IRCC's `X_GetStatus` are both ruled out (see above). Untried:
-  `getContentInformation`/`getStatus` (CERS, port 50002) — both returned
-  structurally-valid-but-empty XML with no disc loaded; worth one more
-  live check with a disc actually playing, though given the AVTransport
-  result, low expectation these differ (same underlying local-playback
-  blind spot seems likely, not confirmed). If nothing pans out, the
-  honest conclusion is this device has no local-playback state exposed
-  over IP at all, full stop — control-only.
 - Confirm whether "Remote Start" is actually required for pairing, or was
   coincidental.
-- Confirm ports 50201/50202 (open, unidentified purpose — 50202 matches
-  sonyapilib's Bravia "app_port" default, may be vestigial on this device).
+- Ports 50201/50202 are open but returned 404 for every path guessed
+  (`/`, `/status`, `/dmr.xml`, `/description.xml`, `/webapi`,
+  `/sony/system`, `/getPlayStatus`, `/getPlaybackStatus`,
+  `/getPlayingStatus`) — no evidence either is actually used by this
+  model; likely vestigial from the shared Bravia/BDP codebase (50202
+  matches sonyapilib's old Bravia "app_port" default). Not pursued
+  further without a better lead than guessing paths.
 - Does pairing persist across player reboots/firmware updates, or does the
   `deviceId` need re-registering periodically?
+- `getHistoryList` untried — name suggests playback history, unlikely to
+  help with live state but unexplored.
+
+## Two Home Assistant bugs found along the way (not protocol-specific)
+
+Both cost real debugging time chasing what looked like protocol problems
+but weren't. Neither is specific to this device — worth remembering for
+any future custom_component work.
+
+1. **A config-entry reload does not re-import a custom_component's `.py`
+   files.** Editing `client.py`/`coordinator.py` on disk and reloading the
+   config entry (`POST /api/config/config_entries/entry/{id}/reload`)
+   reruns `async_setup_entry` using whatever module object Python already
+   had cached in `sys.modules` from the first load — it does **not**
+   re-read the file. This produced a very convincing false negative: the
+   coordinator polled every 10s and logged "success: True" the whole
+   time, entity state looked plausible (`idle`), and yet none of the new
+   logic was actually running — it was still executing the old code.
+   **Fix: a full `ha core restart` after editing a custom_component's
+   code**, not just a config-entry reload. Config-entry reloads are fine
+   for picking up config *data* changes (like a renamed title), just not
+   code changes.
+2. **Renaming a live entity's `entity_id` via
+   `config/entity_registry/update` can silently orphan its
+   `DataUpdateCoordinator`'s polling loop.** The entity kept showing its
+   last-known value indefinitely (`last_reported` frozen) with zero
+   errors logged, until the config entry was reloaded again afterward.
+   Rule: always follow an entity_id rename with a config-entry reload
+   before trusting that entity's live state.

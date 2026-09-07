@@ -273,14 +273,45 @@ class SonyBdpClient:
         return self._commands
 
     def get_content_information(self) -> dict[str, str]:
-        """Current disc/title info, if any. Needs pairing."""
+        """Current disc/title info (class/source/mediaType/mediaFormat), if
+        any. Empty dict with no disc loaded. Needs pairing.
+        """
         root = self._cers_get("getContentInformation")
-        return {child.tag: child.text for child in root}
+        return {
+            item.get("field"): item.get("value")
+            for item in root.findall("infoItem")
+            if item.get("field")
+        }
 
-    def get_status(self) -> dict[str, str]:
-        """Device-level status list. Needs pairing."""
+    def get_status(self) -> dict[str, dict[str, str]]:
+        """Device-level status, keyed by status name (e.g. "viewing", "disc").
+
+        Confirmed live 2026-09-07: a "viewing" entry is present while
+        content is actively being watched (playing OR paused — this does
+        NOT distinguish the two) and absent once you back out to a menu,
+        even with the same disc still loaded (a "disc" entry persists
+        either way). This is the actual usable local-playback-context
+        signal on this device — AVTransport and IRCC's X_GetStatus are
+        not, see docs/PROTOCOL.md. Needs pairing.
+        """
         root = self._cers_get("getStatus")
-        return {child.tag: child.text for child in root}
+        result: dict[str, dict[str, str]] = {}
+        for status_el in root.findall("status"):
+            name = status_el.get("name")
+            if not name:
+                continue
+            result[name] = {
+                item.get("field"): item.get("value")
+                for item in status_el.findall("statusItem")
+                if item.get("field")
+            }
+        return result
+
+    def is_viewing_content(self) -> bool:
+        """True while a movie/disc is actively being watched (playing or
+        paused), False once back at a menu. Needs pairing. See get_status().
+        """
+        return "viewing" in self.get_status()
 
     def send_ircc_code(self, code: str) -> None:
         """Send a raw base64 IRCC code (remote-button press). Needs pairing."""

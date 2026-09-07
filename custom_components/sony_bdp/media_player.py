@@ -16,20 +16,11 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .client import PairingRequired, TransportState
+from .client import PairingRequired
 from .const import CONF_MODEL, DOMAIN
 from .coordinator import SonyBdpCoordinator
 
 _LOGGER = logging.getLogger(__name__)
-
-_STATE_MAP = {
-    TransportState.PLAYING: MediaPlayerState.PLAYING,
-    TransportState.PAUSED: MediaPlayerState.PAUSED,
-    TransportState.STOPPED: MediaPlayerState.IDLE,
-    TransportState.NO_MEDIA: MediaPlayerState.IDLE,
-    TransportState.TRANSITIONING: MediaPlayerState.IDLE,
-    TransportState.UNKNOWN: MediaPlayerState.IDLE,
-}
 
 
 async def async_setup_entry(
@@ -72,10 +63,14 @@ class SonyBdpMediaPlayer(CoordinatorEntity[SonyBdpCoordinator], MediaPlayerEntit
 
     @property
     def state(self) -> MediaPlayerState:
+        """PLAYING means "actively watching content" — playing or paused,
+        this device doesn't distinguish the two (confirmed live, see
+        docs/PROTOCOL.md). IDLE means at a menu (disc may still be loaded).
+        """
         data = self.coordinator.data
         if data is None or not data.reachable:
             return MediaPlayerState.OFF
-        return _STATE_MAP.get(data.transport_state, MediaPlayerState.IDLE)
+        return MediaPlayerState.PLAYING if data.viewing_content else MediaPlayerState.IDLE
 
     async def _async_send(self, name: str, action) -> None:
         try:

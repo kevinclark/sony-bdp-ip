@@ -10,7 +10,7 @@ import requests
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
-from .client import SonyBdpClient, TransportState
+from .client import SonyBdpClient
 from .const import DOMAIN, UPDATE_INTERVAL_SECONDS
 
 _LOGGER = logging.getLogger(__name__)
@@ -21,11 +21,13 @@ class SonyBdpData:
     """Latest known state of the player."""
 
     reachable: bool
-    transport_state: TransportState | None
+    viewing_content: bool
 
 
 class SonyBdpCoordinator(DataUpdateCoordinator[SonyBdpData]):
-    """Polls transport state. Treats connection failure as 'powered off'.
+    """Polls whether content is actively being watched (not play vs. pause
+    — see docs/PROTOCOL.md; that distinction isn't available on this
+    device). Treats connection failure as 'powered off'.
 
     The player drops off the network entirely in full standby (relying on
     Wake-on-LAN at the Ethernet frame level, no IP stack involved) — see
@@ -44,9 +46,9 @@ class SonyBdpCoordinator(DataUpdateCoordinator[SonyBdpData]):
 
     async def _async_update_data(self) -> SonyBdpData:
         try:
-            state = await self.hass.async_add_executor_job(
-                self.client.get_transport_state
+            viewing = await self.hass.async_add_executor_job(
+                self.client.is_viewing_content
             )
         except requests.exceptions.RequestException:
-            return SonyBdpData(reachable=False, transport_state=None)
-        return SonyBdpData(reachable=True, transport_state=state)
+            return SonyBdpData(reachable=False, viewing_content=False)
+        return SonyBdpData(reachable=True, viewing_content=viewing)
