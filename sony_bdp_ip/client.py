@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import base64
 import socket
-from dataclasses import dataclass, field
 from enum import Enum
 from xml.etree import ElementTree
 
@@ -20,6 +19,56 @@ DEFAULT_IRCC_PORT = 50001
 DEFAULT_CERS_PORT = 50002
 DEFAULT_DMR_PORT = 52323
 TIMEOUT = 5
+
+# Confirmed live against a UBP-X700 (BDP-2018) via getRemoteCommandList
+# after pairing. Same firmware family should match; call
+# get_remote_commands() to fetch the device's own table instead of trusting
+# this if you're on different hardware.
+IRCC_CODES = {
+    "Confirm": "AAAAAwAAHFoAAAA9Aw==",
+    "Up": "AAAAAwAAHFoAAAA5Aw==",
+    "Down": "AAAAAwAAHFoAAAA6Aw==",
+    "Right": "AAAAAwAAHFoAAAA8Aw==",
+    "Left": "AAAAAwAAHFoAAAA7Aw==",
+    "Home": "AAAAAwAAHFoAAABCAw==",
+    "Options": "AAAAAwAAHFoAAAA/Aw==",
+    "Return": "AAAAAwAAHFoAAABDAw==",
+    "Num1": "AAAAAwAAHFoAAAAAAw==",
+    "Num2": "AAAAAwAAHFoAAAABAw==",
+    "Num3": "AAAAAwAAHFoAAAACAw==",
+    "Num4": "AAAAAwAAHFoAAAADAw==",
+    "Num5": "AAAAAwAAHFoAAAAEAw==",
+    "Num6": "AAAAAwAAHFoAAAAFAw==",
+    "Num7": "AAAAAwAAHFoAAAAGAw==",
+    "Num8": "AAAAAwAAHFoAAAAHAw==",
+    "Num9": "AAAAAwAAHFoAAAAIAw==",
+    "Num0": "AAAAAwAAHFoAAAAJAw==",
+    "Power": "AAAAAwAAHFoAAAAVAw==",
+    "Display": "AAAAAwAAHFoAAABBAw==",
+    "Audio": "AAAAAwAAHFoAAABkAw==",
+    "SubTitle": "AAAAAwAAHFoAAABjAw==",
+    "Favorites": "AAAAAwAAHFoAAABeAw==",
+    "Yellow": "AAAAAwAAHFoAAABpAw==",
+    "Blue": "AAAAAwAAHFoAAABmAw==",
+    "Red": "AAAAAwAAHFoAAABnAw==",
+    "Green": "AAAAAwAAHFoAAABoAw==",
+    "Play": "AAAAAwAAHFoAAAAaAw==",
+    "Stop": "AAAAAwAAHFoAAAAYAw==",
+    "Pause": "AAAAAwAAHFoAAAAZAw==",
+    "Rewind": "AAAAAwAAHFoAAAAbAw==",
+    "Forward": "AAAAAwAAHFoAAAAcAw==",
+    "Prev": "AAAAAwAAHFoAAABXAw==",
+    "Next": "AAAAAwAAHFoAAABWAw==",
+    "Replay": "AAAAAwAAHFoAAAB2Aw==",
+    "Advance": "AAAAAwAAHFoAAAB1Aw==",
+    "Angle": "AAAAAwAAHFoAAABlAw==",
+    "TopMenu": "AAAAAwAAHFoAAAAsAw==",
+    "PopUpMenu": "AAAAAwAAHFoAAAApAw==",
+    "Eject": "AAAAAwAAHFoAAAAWAw==",
+    "Karaoke": "AAAAAwAAHFoAAABKAw==",
+    "Netflix": "AAAAAwAAHFoAAABLAw==",
+    "Mode3D": "AAAAAwAAHFoAAABNAw==",
+}
 
 _SOAP_ENVELOPE = """<?xml version="1.0" encoding="utf-8"?>
 <s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"
@@ -77,6 +126,7 @@ class SonyBdpClient:
         self.dmr_port = dmr_port
         self.mac = mac
         self.pin: str | None = None
+        self._commands: dict[str, str] | None = None
 
     @property
     def is_paired(self) -> bool:
@@ -146,8 +196,10 @@ class SonyBdpClient:
     def begin_pairing(self) -> bool:
         """Kick off pairing. Returns True once the device is waiting for a PIN.
 
-        The device should show a PIN somewhere (front panel or on-screen
-        display) after this call — pass it to complete_pairing().
+        The PIN shows up as on-screen text over HDMI (confirmed: the
+        UBP-X700 has no front-panel display), so a display needs to be on
+        and fed from the player to read it. Pass the PIN to
+        complete_pairing().
         """
         url = (
             f"http://{self.host}:{self.cers_port}/register"
@@ -171,6 +223,36 @@ class SonyBdpClient:
             return False
         return True
 
+    def _cers_get(self, action: str) -> ElementTree.Element:
+        if not self.is_paired:
+            raise PairingRequired("call complete_pairing() first")
+        url = f"http://{self.host}:{self.cers_port}/{action}"
+        response = requests.get(url, headers=self._auth_headers(), timeout=TIMEOUT)
+        response.raise_for_status()
+        return ElementTree.fromstring(response.content)
+
+    def get_remote_commands(self, refresh: bool = False) -> dict[str, str]:
+        """Fetch this device's own name->IRCC-code table. Needs pairing."""
+        if self._commands is not None and not refresh:
+            return self._commands
+        root = self._cers_get("getRemoteCommandList")
+        self._commands = {
+            el.get("name"): el.get("value")
+            for el in root.findall("command")
+            if el.get("name") and el.get("value")
+        }
+        return self._commands
+
+    def get_content_information(self) -> dict[str, str]:
+        """Current disc/title info, if any. Needs pairing."""
+        root = self._cers_get("getContentInformation")
+        return {child.tag: child.text for child in root}
+
+    def get_status(self) -> dict[str, str]:
+        """Device-level status list. Needs pairing."""
+        root = self._cers_get("getStatus")
+        return {child.tag: child.text for child in root}
+
     def send_ircc_code(self, code: str) -> None:
         """Send a raw base64 IRCC code (remote-button press). Needs pairing."""
         if not self.is_paired:
@@ -182,6 +264,34 @@ class SonyBdpClient:
             f"<IRCCCode>{code}</IRCCCode></u:X_SendIRCC>"
         )
         self._soap_request(url, action, body)
+
+    def send_command(self, name: str) -> None:
+        """Send a remote-button press by name, e.g. "Play" or "Eject".
+
+        Uses the device's own command list if it's been fetched (see
+        get_remote_commands()), otherwise falls back to the known IRCC_CODES
+        table. Needs pairing.
+        """
+        code = (self._commands or IRCC_CODES).get(name)
+        if code is None:
+            raise ValueError(f"unknown command: {name}")
+        self.send_ircc_code(code)
+
+    def play(self) -> None:
+        self.send_command("Play")
+
+    def pause(self) -> None:
+        self.send_command("Pause")
+
+    def stop(self) -> None:
+        self.send_command("Stop")
+
+    def power(self) -> None:
+        """Toggle power (no separate on/off code — this is what the remote's power button sends)."""
+        self.send_command("Power")
+
+    def eject(self) -> None:
+        self.send_command("Eject")
 
     def wake_on_lan(self, broadcast: str = "255.255.255.255") -> None:
         """Power on from full standby via a WOL magic packet."""

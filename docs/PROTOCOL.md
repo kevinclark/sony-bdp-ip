@@ -86,6 +86,13 @@ The player answers `401 Unauthorized` /
 `WWW-Authenticate: Basic realm="Sony-BDP registration"` on the register
 endpoint until paired. Confirmed live.
 
+**One prerequisite found live**: the player's Setup → Network menu has a
+"Remote Start" option, off by default, that (per Sony's docs) governs
+whether app-based remote control/registration is allowed. We turned it on
+before pairing worked — not confirmed as strictly required (registration
+may well have worked with it off too, since basic queries never needed it),
+but flip it on before attempting pairing to rule it out as a variable.
+
 Registration action is discovered from `/Ircc.xml`'s
 `X_CERS_ActionList_URL`, which points to `http://<ip>:50002/actionList`:
 
@@ -94,23 +101,31 @@ Registration action is discovered from `/Ircc.xml`'s
         url="http://<ip>:50002/register"/>
 ```
 
-`mode="3"` = HTTP Basic-auth PIN challenge flow:
+`mode="3"` = HTTP Basic-auth PIN challenge flow, **fully confirmed live
+end-to-end 2026-09-07**:
 
 1. `GET http://<ip>:50002/register?name=<client-name>&registrationType=initial&deviceId=<client-id>&wolSupport=true`
-   with no `Authorization` header. Confirmed: returns `401` and the player
-   should display a PIN (location TBD — front panel vs. TV/projector output,
-   not yet confirmed for this unit).
-2. Re-issue the same request with `Authorization: Basic base64(":" + pin)`.
-3. On success, subsequent requests must carry these headers on every call:
-   `X-CERS-DEVICE-ID: <client-id>`, `X-CERS-DEVICE-INFO: <client-id>`.
-   (Not cookie-based, unlike the newer v4/JSON-RPC Bravia flow.)
+   with no `Authorization` header → `401`. The player then shows a PIN.
+   **This unit has no front-panel display at all**, so the PIN can only
+   show as on-screen text over HDMI — the projector/receiver need to be on
+   and fed from the player to read it. (This is a one-time cost for
+   pairing only; none of the day-to-day calls below need a display on.)
+2. Re-issue the identical request with `Authorization: Basic base64(":" + pin)`
+   (i.e. empty username) → `200 OK`, empty body. No cookie is set — unlike
+   the newer v4/JSON-RPC Bravia flow, this is stateless Basic auth.
+3. Every subsequent authenticated call must carry:
+   `Authorization: Basic base64(":" + pin)`,
+   `X-CERS-DEVICE-ID: <client-id>`, `X-CERS-DEVICE-INFO: <client-id>`
+   — same `client-id` used at registration.
 
-Once paired, remote-button-style control goes through IRCC:
+Once paired, remote-button-style control goes through IRCC — **confirmed
+live**, verified physically via the tray eject command:
 
 ```
 POST http://<ip>:50001/upnp/control/IRCC HTTP/1.1
 Content-Type: text/xml; charset="utf-8"
 SOAPACTION: "urn:schemas-sony-com:service:IRCC:1#X_SendIRCC"
+Authorization: Basic <base64>
 X-CERS-DEVICE-ID: <client-id>
 X-CERS-DEVICE-INFO: <client-id>
 
@@ -124,19 +139,26 @@ X-CERS-DEVICE-INFO: <client-id>
 </s:Envelope>
 ```
 
-The actual IRCC code table for play/pause/stop/power has not yet been
-pulled from this unit — CERS's `getRemoteCommandList` (port 50002) should
-return it post-pairing; it returned empty when tried unauthenticated.
+The full command table was pulled live from `getRemoteCommandList` (port
+50002, same auth headers as above) — see `sony_bdp_ip/client.py`'s
+`IRCC_CODES` for the complete confirmed list (Play, Pause, Stop, Power,
+Eject, transport/menu/number-pad buttons, Netflix, etc.).
 
-Other CERS actions gated behind the same pairing (all returned empty
-unauthenticated): `getStatus`, `getContentInformation` (likely current
-disc/title info), `getHistoryList`.
+Other CERS actions gated behind the same pairing:
+- `getContentInformation` — returned an empty `<statusList/>`-style
+  response with no disc loaded; not yet seen with a disc in to know its
+  real shape.
+- `getStatus` — same, empty `<statusList/>` when idle.
+- `getHistoryList` — not yet tried.
 
 ## Open questions / next verification steps
 
-- Where does the pairing PIN actually display on this unit (front panel vs.
-  HDMI OSD)? Determines whether pairing needs the projector/receiver on.
-- Decode `getRemoteCommandList` once paired to get real IRCC codes for
-  play/pause/stop/power.
+- Confirm whether "Remote Start" is actually required for pairing, or was
+  coincidental.
+- Capture `getContentInformation`/`getStatus` output with a disc actually
+  loaded and playing, to see their real shape (title, elapsed time, etc.).
 - Decode `X_GetStatus`'s `CurrentStatus`/`CurrentCommandInfo` values.
-- Confirm ports 50201/50202 (open, unidentified purpose).
+- Confirm ports 50201/50202 (open, unidentified purpose — 50202 matches
+  sonyapilib's Bravia "app_port" default, may be vestigial on this device).
+- Does pairing persist across player reboots/firmware updates, or does the
+  `deviceId` need re-registering periodically?

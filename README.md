@@ -15,9 +15,9 @@ Early / in progress. So far, confirmed live against a real UBP-X700:
 
 - [x] Playback state (playing/paused/stopped/no-disc) — no pairing needed
 - [x] Basic system info + WOL MAC — no pairing needed
-- [x] Wake-on-LAN power-on
-- [ ] PIN pairing flow
-- [ ] Remote control (play/pause/stop/power) via IRCC
+- [x] Wake-on-LAN power-on (device confirms WOL support; not yet tested end-to-end from cold)
+- [x] PIN pairing flow — confirmed live 2026-09-07
+- [x] Remote control (play/pause/stop/power/eject/...) via IRCC — confirmed live, eject physically verified
 - [ ] Home Assistant integration (`custom_components/sony_bdp`)
 
 ## Layout
@@ -36,3 +36,16 @@ client = SonyBdpClient(host="192.168.20.244", mac="88:c9:e8:61:66:c5")
 print(client.get_transport_state())      # TransportState.NO_MEDIA
 print(client.get_system_information())   # {"name": "BDPlayer", ...}
 ```
+
+Pairing (one-time; needs the projector/receiver on so the PIN — shown as
+on-screen text over HDMI — is visible):
+
+```python
+client.begin_pairing()          # player now displays a PIN
+client.complete_pairing("5544")  # whatever PIN it showed
+client.eject()                   # or .play() / .pause() / .stop() / .power()
+```
+
+`client_id` (constructor arg, defaults to `"home-assistant"`) plus the PIN
+together act as the credential — keep both if you want to skip re-pairing
+on restart; there's no separate token/cookie issued.
