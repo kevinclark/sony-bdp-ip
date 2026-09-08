@@ -2,6 +2,8 @@
 # sony-bdp-ip
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![CI](https://github.com/kevinclark/sony-bdp-ip/actions/workflows/ci.yml/badge.svg)](https://github.com/kevinclark/sony-bdp-ip/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/sony-bdp-ip.svg)](https://pypi.org/project/sony-bdp-ip/)
 
 A Python client for the undocumented IP control protocol used by Sony's
 **BDP-CE** family of Blu-ray players — developed and tested against a
@@ -41,7 +43,11 @@ repo: [**home-assistant-sony-bdp**](https://github.com/kevinclark/home-assistant
 
 ## Installation
 
-Not yet published to PyPI. Install directly from GitHub:
+```bash
+pip install sony-bdp-ip
+```
+
+Or straight from GitHub for the latest unreleased code:
 
 ```bash
 pip install git+https://github.com/kevinclark/sony-bdp-ip.git

@@ -12,10 +12,17 @@ classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Home Automation",
+    "Typing :: Typed",
 ]
+
+[project.optional-dependencies]
+dev = ["pytest", "build", "twine"]
 
 [project.urls]
 Homepage = "https://github.com/kevinclark/sony-bdp-ip"
@@ -27,3 +34,6 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 include = ["sony_bdp_ip*"]
+
+[tool.setuptools.package-data]
+sony_bdp_ip = ["py.typed"]

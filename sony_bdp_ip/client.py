@@ -1,9 +1,12 @@
 """IP control client for Sony BDP-CE Blu-ray players (e.g. UBP-X700).
 
-Protocol details are documented in docs/PROTOCOL.md. In short: playback
-state comes from a standard, unauthenticated UPnP AVTransport service.
-Actual remote control (play/pause/power/etc.) goes through a Sony-specific
-IRCC service that requires a one-time PIN pairing.
+Protocol details are documented in docs/PROTOCOL.md. In short: the local
+playback signal is CERS `getStatus` (see get_status()/is_viewing_content()),
+not the standard UPnP AVTransport service exposed on the DMR port — that
+one is real and unauthenticated but appears wired only for DLNA-pushed
+content, not local disc/menu playback (see get_transport_state()). Actual
+remote control (play/pause/power/etc.) goes through a Sony-specific IRCC
+service that requires a one-time PIN pairing.
 """
 
 from __future__ import annotations
@@ -159,7 +162,14 @@ class SonyBdpClient:
         return ElementTree.fromstring(response.content)
 
     def get_transport_state(self) -> TransportState:
-        """Query play/pause/stop state. Needs no pairing."""
+        """Query AVTransport's play/pause/stop state. Needs no pairing.
+
+        Does NOT reflect local disc/menu playback — this stayed
+        NO_MEDIA_PRESENT throughout a real play/pause/stop cycle in
+        testing. Appears wired only for DLNA-pushed ("Play To") content.
+        For local playback, use is_viewing_content()/get_status() instead.
+        See docs/PROTOCOL.md for the full investigation.
+        """
         url = f"http://{self.host}:{self.dmr_port}/upnp/control/AVTransport"
         action = "urn:schemas-upnp-org:service:AVTransport:1#GetTransportInfo"
         body = (
