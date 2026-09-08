@@ -35,8 +35,8 @@ field="MAC" value="88-c9-e8-61-66-c5"/></function>`.
 is CERS `getStatus`, documented further down.** `GetTransportInfo` stayed
 `NO_MEDIA_PRESENT` throughout an entire play → pause → stop cycle driven
 by the player's own physical remote, confirmed twice, including a direct
-query (bypassing HA/any caching) taken at the exact moment content was
-confirmed actively playing on screen. IRCC's `X_GetStatus` was tried as a
+query (bypassing any client-side caching) taken at the exact moment content
+was confirmed actively playing on screen. IRCC's `X_GetStatus` was tried as a
 fallback and also ruled out: its `CurrentCommandInfo` field decodes to
 the same 13-byte structure as an `X_SendIRCC` command payload, and its
 trailing command-code byte matched **the last IRCC command this session
@@ -71,8 +71,8 @@ SOAPACTION: "urn:schemas-upnp-org:service:AVTransport:1#GetTransportInfo"
 Response body contains `<CurrentTransportState>`, one of the standard UPnP
 AVTransport values: `PLAYING`, `PAUSED_PLAYBACK`, `STOPPED`,
 `NO_MEDIA_PRESENT`, `TRANSITIONING`. Initially assumed this would be the
-long-missing play/pause/stop signal for the theater automation — **it
-is not**, for local disc playback (see the update above).
+missing local play/pause/stop signal — **it is not**, for local disc
+playback (see the update above).
 
 IRCC also exposes an unauthenticated status query:
 
@@ -327,29 +327,7 @@ without a real lead rather than guessing.
   retrying with parameters if a real lead ever turns up (untried: does it
   want a query string? a POST body?), but not promising on its own.
 
-## Two Home Assistant bugs found along the way (not protocol-specific)
-
-Both cost real debugging time chasing what looked like protocol problems
-but weren't. Neither is specific to this device — worth remembering for
-any future custom_component work.
-
-1. **A config-entry reload does not re-import a custom_component's `.py`
-   files.** Editing `client.py`/`coordinator.py` on disk and reloading the
-   config entry (`POST /api/config/config_entries/entry/{id}/reload`)
-   reruns `async_setup_entry` using whatever module object Python already
-   had cached in `sys.modules` from the first load — it does **not**
-   re-read the file. This produced a very convincing false negative: the
-   coordinator polled every 10s and logged "success: True" the whole
-   time, entity state looked plausible (`idle`), and yet none of the new
-   logic was actually running — it was still executing the old code.
-   **Fix: a full `ha core restart` after editing a custom_component's
-   code**, not just a config-entry reload. Config-entry reloads are fine
-   for picking up config *data* changes (like a renamed title), just not
-   code changes.
-2. **Renaming a live entity's `entity_id` via
-   `config/entity_registry/update` can silently orphan its
-   `DataUpdateCoordinator`'s polling loop.** The entity kept showing its
-   last-known value indefinitely (`last_reported` frozen) with zero
-   errors logged, until the config entry was reloaded again afterward.
-   Rule: always follow an entity_id rename with a config-entry reload
-   before trusting that entity's live state.
+Two general Home Assistant custom_component gotchas turned up while
+building the integration that consumes this library — not specific to
+this device or protocol, so they live in that repo instead:
+[home-assistant-sony-bdp/docs/DEVELOPMENT.md](https://github.com/kevinclark/home-assistant-sony-bdp/blob/main/docs/DEVELOPMENT.md).

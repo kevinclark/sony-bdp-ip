@@ -115,8 +115,8 @@ class SonyBdpClient:
     def __init__(
         self,
         host: str,
-        client_id: str = "home-assistant",
-        nickname: str = "Home Assistant",
+        client_id: str = "sony-bdp-ip",
+        nickname: str = "sony-bdp-ip",
         ircc_port: int = DEFAULT_IRCC_PORT,
         cers_port: int = DEFAULT_CERS_PORT,
         dmr_port: int = DEFAULT_DMR_PORT,
