@@ -294,9 +294,23 @@ class SonyBdpClient:
         content is actively being watched (playing OR paused — this does
         NOT distinguish the two) and absent once you back out to a menu,
         even with the same disc still loaded (a "disc" entry persists
-        either way). This is the actual usable local-playback-context
-        signal on this device — AVTransport and IRCC's X_GetStatus are
-        not, see docs/PROTOCOL.md. Needs pairing.
+        either way).
+
+        WARNING (2026-09-19): "viewing" has stopped appearing at all. A
+        UHD BD-ROM played for over an hour — owner-confirmed, corroborated
+        by the projector reporting a live 3840x2160/24p signal — and every
+        response across four sampling windows contained only "disc". The
+        polling client was verified healthy throughout (~10 s cadence, all
+        successful, "disc" parsed correctly from the same responses), so
+        this is the device's answer, not a fetch failure. Suspected cause
+        is a firmware update; no version was captured on 2026-09-07 to
+        diff against. Do not build new work on "viewing" — use the DIAL
+        app-state probe (port 50202, unauthenticated, no pairing). Full
+        write-up in docs/PROTOCOL.md.
+
+        AVTransport and IRCC's X_GetStatus remain ruled out as playback
+        signals — AVTransport was re-tested 2026-09-19 during confirmed
+        playback and still returned NO_MEDIA_PRESENT. Needs pairing.
         """
         root = self._cers_get("getStatus")
         result: dict[str, dict[str, str]] = {}
@@ -314,6 +328,12 @@ class SonyBdpClient:
     def is_viewing_content(self) -> bool:
         """True while a movie/disc is actively being watched (playing or
         paused), False once back at a menu. Needs pairing. See get_status().
+
+        WARNING (2026-09-19): this now returns False even during real
+        playback — the device stopped emitting the "viewing" entry this
+        wraps. The check itself is unchanged and still faithful; it is the
+        device behaviour that changed. See get_status() and
+        docs/PROTOCOL.md, and prefer the DIAL probe.
         """
         return "viewing" in self.get_status()
 

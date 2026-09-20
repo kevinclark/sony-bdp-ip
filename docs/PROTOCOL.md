@@ -9,6 +9,16 @@ Crestron forum thread (groups.io, inaccessible directly due to a bot-check
 wall) and the [sonyapilib](https://github.com/gohlas/sonyapilib) Python
 project, which implements the same API for Bravia devices.
 
+> **⚠️ 2026-09-19 — one central claim in this document has been falsified.**
+> CERS `getStatus` **no longer emits a `<status name="viewing">` entry during
+> real playback**, so `viewing` is not a usable "content is up" signal any
+> more, and DIAL is *not* "the exact same granularity" as it. Both statements
+> were true when written on 2026-09-07 and are wrong now. The sections below
+> are annotated inline. The working signal today is the DIAL app-state probe.
+> Everything else in this document — the AVTransport and IRCC `X_GetStatus`
+> rulings, pairing, WOL, the no-title-anywhere finding — was re-tested or is
+> unaffected and still holds.
+
 ## Ports
 
 Confirmed open on the player when powered on:
@@ -218,20 +228,47 @@ below):
 </statusList>
 ```
 
-So: **presence of a `<status name="viewing">` entry is the real,
-confirmed-working "content is actively being watched" signal** on this
+So (**as of 2026-09-07**): presence of a `<status name="viewing">` entry
+looked like the real "content is actively being watched" signal on this
 device. `getContentInformation` returns the same `class`/`source`/
 `mediaType`/`mediaFormat` fields regardless of viewing vs. menu (useful
-for identifying the disc, not for playback state). `is_viewing_content()`
-in `sony_bdp_ip/client.py` wraps this. This is what the [Home Assistant
-integration](https://github.com/kevinclark/home-assistant-sony-bdp)'s
-`media_player.ubp_x700` actually polls now (not `AVTransport`, which is
-ruled out above).
+for identifying the disc, not for playback state) — that part still holds.
+
+> **⚠️ FALSIFIED 2026-09-19. `viewing` stopped appearing at all.**
+>
+> A UHD BD-ROM played for over an hour and `getStatus` returned **only the
+> `disc` entry**, never `viewing` — sampled in four separate windows across
+> 75 minutes, three of them back-to-back 8 s apart. Playback was not
+> inferred: the owner stated directly that the movie was playing, and it was
+> independently corroborated by the projector reporting a live
+> `3840x2160/24p` signal, madVR incoming `23.976p`, and a mid-stream aspect
+> transition one minute before the query.
+>
+> This is the device's answer, not a fetch failure. The polling client was
+> verified healthy throughout — HA debug log showed the coordinator
+> completing `getStatus` every ~10 s with `success: True` in 5–50 ms — and
+> the `disc` entry came back correctly in the very same responses, so
+> parsing and auth were both fine.
+>
+> The 2026-09-07 observation above was real; it simply does not generalise.
+> **Suspected cause: a player firmware update between the two dates.** No
+> firmware version was captured on 2026-09-07, so there is no baseline to
+> diff — capture `getSystemInformation` now so the next change is
+> detectable.
+>
+> `is_viewing_content()` in `sony_bdp_ip/client.py` still wraps this check
+> faithfully; it is the premise that broke, not the code. The [Home
+> Assistant integration](https://github.com/kevinclark/home-assistant-sony-bdp)
+> moved to `viewing` **OR** the DIAL probe in v0.1.2 and now exposes
+> `cers_viewing` / `dial_running` as separate entity attributes, so a future
+> disagreement is visible without hand-building an authenticated request.
+> `AVTransport` remains ruled out — re-tested during the same confirmed
+> playback, still `NO_MEDIA_PRESENT`.
 
 **Confirmed NOT distinguishable, checked directly against the device
 mid-pause**: playing vs. paused. `getStatus`/`getContentInformation` are
-byte-for-byte identical in both states — the `viewing` entry is present
-either way. Nothing found anywhere in this protocol (AVTransport, IRCC
+byte-for-byte identical in both states — the `viewing` entry was present
+either way (back when it appeared at all; see the 2026-09-19 note above). Nothing found anywhere in this protocol (AVTransport, IRCC
 status, or CERS status/content) separates the two. Practical conclusion:
 **"is a movie actively being watched" is real and working; "is it
 currently paused" is not achievable on this device with what's been
@@ -299,13 +336,21 @@ Returns `<state>running</state>` or `<state>stopped</state>`.
 is `running` from the moment you enter the disc (its own top menu counts
 — confirmed separately from the player's home menu, which reads
 `stopped`) through the studio-logo intro, into the feature, and
-**unchanged through a real mid-movie pause** — i.e. it's the exact same
-granularity as CERS `getStatus`'s `viewing` entry, just via a different,
-standards-based mechanism. Not more useful for play/pause detection, but
-a genuinely independent confirmation of the same signal — two unrelated
-services on this device agree on where the "watching vs. not" line is,
-which is reassuring evidence `getStatus` isn't some fluke Sony-specific
-side effect. **Port 50201 remains fully unidentified** — every guessed
+**unchanged through a real mid-movie pause**. Originally described here as
+"the exact same granularity as CERS `getStatus`'s `viewing` entry" — that
+equivalence was **falsified 2026-09-19**, when DIAL reported `running`
+continuously through an hour of confirmed playback while `viewing` was
+absent from every `getStatus` response. The two are not interchangeable.
+
+Note the parenthetical above already hinted at this: DIAL reads `running`
+from the disc's **own top menu** onward, whereas `viewing` was meant to mark
+content actually being watched. DIAL is the broader signal, and always was.
+For the practical question "is the disc up, should the room dim?" that is
+arguably the more useful line — but it is not the same line.
+
+**DIAL is now the only working "content is up" signal on this device**, and
+it is the better one to build on regardless: unauthenticated, no pairing, a
+published standard rather than Sony's legacy CERS scheme. **Port 50201 remains fully unidentified** — every guessed
 path returned 404, including DIAL-style ones (`/dd.xml`,
 `/DIAL/sony/applist`) and CERS-style ones — not worth pursuing further
 without a real lead rather than guessing.
